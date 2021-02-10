@@ -2,7 +2,12 @@
 import simplejson as json
 from tqdm import tqdm
 from copy import copy
-from itertools import combinations 
+from itertools import combinations
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.optimize import fsolve
+import re
+import pandas as pd
 #%%
 def make_list_chars(arr):
     unique = list(set(arr))
@@ -42,7 +47,19 @@ def removeDuplicates(str_input):
     # character.  
     j += 1
     S = S[:j] 
-    return S 
+    return S
+
+def count_tuple(lst, item):
+    cnt = 0
+    for i, j in lst:
+        if j == item:
+            cnt += 1
+    return cnt
+
+def graph_equation(formula, x_range, **kwargs):
+    x = np.array(x_range)
+    y = formula(x)
+    plt.plot(x,y, **kwargs)
 #%%
 with open("data/stretch-teleop.json") as f:
     data = json.load(f)
@@ -61,14 +78,14 @@ with open("data/stretch-teleop.json") as f:
 
 event_mapping = {
     'SessionStarted': 0.0,
-    'Task1Started': 0.0,
-    'Task1Ended': 0.0,
-    'Task2Started': 0.0,
-    'Task2Ended': 0.0,
-    'Task3Started': 0.0,
-    'Task3Ended': 0.0,
-    'Task4Started': 0.0,
-    'Task4Ended': 0.0,
+    'Task1Started': 0.1,
+    'Task1Ended': 0.2,
+    'Task2Started': 0.3,
+    'Task2Ended': 0.4,
+    'Task3Started': 0.5,
+    'Task3Ended': 0.6,
+    'Task4Started': 0.7,
+    'Task4Ended': 0.8,
     'LookUp': 1.0,
     'LookRight': 1.1,
     'LookDown': 1.2,
@@ -86,9 +103,11 @@ event_mapping = {
     'GripperClose': 7.0,
     'GripperOpen': 7.1,
     'ModeChange': -1.0,
-    'SetCameraView': -1.0,
-    'SpeedChange': -1.0
+    'SetCameraView': -1.1,
+    'SpeedChange': -1.2
 }
+
+inverted_event_mapping = {v: k for k, v in event_mapping.items()}
 #%%
 
 eventInfo = set()
@@ -122,7 +141,7 @@ print(eventName)
 d = {}
 
 MINLEN = 2
-MAXLEN = 10
+MAXLEN = 100
 MINCNT = 2
 
 substrings = [s[x:y] for x, y in combinations(range(len(s) + 1), r = 2)]
@@ -147,8 +166,90 @@ with open('data/brute-force.json', 'r') as f:
 with open('data/mapping.json', 'r') as f:
     mapping = json.load(f)
 
-inverted_mapping = {v: k for k, v in mapping.items()}
+inverted_char_mapping = {v: float(k) for k, v in mapping.items()}
 
-print(patterns.keys())
+# Sort patterns by how many times they were repeated
+patterns_sorted = sorted(patterns.items(), key=lambda kv: kv[1])
 
+print(f"Loaded {len(patterns_sorted)} patterns total")
+#%%
+# This code solves for a rational function that intersects 3 points
+# It is used to remove patterns that don't appear often enough for their pattern length
+# points is formated: [x,y]
+points = [[2,150],[4,30],[9,2]]
+def e(i):
+    a,b,c = i
+    r = []
+    for p in points:
+        r.append((a/(p[1]-b))-c-p[0])
+    return r
+
+a,b,c = fsolve(e, (1, 1, 1))
+f = lambda x: (a/(x+c))+b
+
+
+x = [len(k) for k, v in patterns_sorted]
+y = [v for k,v in patterns_sorted]
+col = []
+for i in range(len(y)):
+    if y[i] < f(x[i]):
+        col.append((0.5,0.5,1,0.05))
+    else:
+        col.append((0,0.5,0,0.5))
+
+plt.rcParams["figure.figsize"] = (20, 15)
+plt.scatter(x, y, s=200, color=col)
+
+
+extend_line = 0.1
+graph_equation(f, np.arange(2-extend_line,12+extend_line,0.05), c="red", linewidth=2)
+# %%
+patterns_filtered = np.array([k for k,v in patterns_sorted])[y >= f(x)]
+# %%
+user_action_count = []
+user_list = []
+for user in data['users'].keys():
+    user_action_count.append(len(data['users'][user]) + (user_action_count[-1] if user_action_count else 0))
+    user_list.append(user)
+
+action_char_list = "".join(simplified)
+
+def locate_char_pattern(action_pattern):
+    # Add a "+" after each character to make it a valid regex pattern
+    re_pattern = ""
+    to_escape = "[](){}*+?|^%.\\"
+    for c in action_pattern:
+        if c in to_escape:
+            re_pattern += "\\"
+        re_pattern += c + "+"
+    
+    return [(m.start(0), m.end(0)) for m in re.finditer(re_pattern, action_char_list)]
+
+def find_pattern_user(pattern_location):
+    pattern_start = pattern_location[0]
+    user_index = 0
+    for i in range(len(user_action_count)):
+        if pattern_start < user_action_count[i]:
+            user_index = i
+            break
+    if user_index > 0:
+        pattern_start -= user_action_count[user_index-1]
+    
+    return (user_list[user_index], list(data['users'][user_list[user_index]].keys())[pattern_start])
+
+final_patterns = []
+
+for pattern in patterns_filtered:
+    translated_pattern = ",".join([inverted_event_mapping[inverted_char_mapping[c]] for c in pattern])
+    pattern_locations = locate_char_pattern(pattern)
+
+    pattern_info = ""
+
+    for loc in pattern_locations:
+        pattern_info += ":".join(find_pattern_user(loc)) + ";"
+
+    final_patterns.append([translated_pattern, pattern_info, len(pattern), s.count(pattern)])
+
+df = pd.DataFrame(data=final_patterns, columns=['pattern','user-timestamp','pattern-length', 'pattern-frequency'])
+df.to_csv("data/patterns.csv")
 # %%

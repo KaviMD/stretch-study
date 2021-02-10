@@ -203,6 +203,9 @@ plt.scatter(x, y, s=200, color=col)
 
 extend_line = 0.1
 graph_equation(f, np.arange(2-extend_line,12+extend_line,0.05), c="red", linewidth=2)
+
+plt.xlabel('Pattern Length', fontsize=18)
+plt.ylabel('Pattern Frequency', fontsize=18)
 # %%
 patterns_filtered = np.array([k for k,v in patterns_sorted])[y >= f(x)]
 # %%

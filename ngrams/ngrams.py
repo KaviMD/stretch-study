@@ -69,3 +69,9 @@ for i in range(10):
         if probabilities[i][0] > r:
             print(probabilities[i][1])
             break
+
+# basically ngrams help you pick the next n words with the highest probility given the previous n words
+# We could have the previous n be an anction list and the next n be on of our patterns
+# Could have everything be patterns or everything be action list
+# What should n be? it doesn't seem like we have enough data for it to be that large
+# Should I get rid of all of the view switches?

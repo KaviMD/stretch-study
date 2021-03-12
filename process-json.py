@@ -142,7 +142,7 @@ d = {}
 
 MINLEN = 2
 MAXLEN = 100
-MINCNT = 2
+MINCNT = 1
 
 substrings = [s[x:y] for x, y in combinations(range(len(s) + 1), r = 2)]
 

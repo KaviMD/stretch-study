@@ -1,3 +1,4 @@
+from os import sep
 import random
 
 # Based on the techniques described here: https://web.archive.org/web/20150908034624/https://lagunita.stanford.edu/c4x/Engineering/CS-224N/asset/slp4.pdf
@@ -52,26 +53,20 @@ def cdf(ngrams):
     
     return probabilities
 
-corpus = ''
+def filter_dict_keys(dictionary, to_include, starting_index=0,separator=' ', inplace=False):
+    to_filter = dictionary
+    if not inplace:
+        to_filter = dictionary.copy()
+    
+    keys = to_filter.keys()
 
-with open('data/movies_text.txt') as f:
-    corpus = f.read()[1:100_000]
+    for key in list(keys):
+        if not to_include == key.split(separator)[starting_index:len(to_include)+starting_index]:
+            del to_filter[key]
+    
+    return to_filter
 
-### Simple text generation
-ngrams = generate_ngrams(10, corpus)
-
-probabilities = cdf(ngrams)
-
-for i in range(10):
-    r = random.uniform(0, 1)
-
+def pick_ngram(probabilities, separator = ' '):
     for i in range(len(probabilities)):
-        if probabilities[i][0] > r:
-            print(probabilities[i][1])
-            break
-
-# basically ngrams help you pick the next n words with the highest probility given the previous n words
-# We could have the previous n be an anction list and the next n be on of our patterns
-# Could have everything be patterns or everything be action list
-# What should n be? it doesn't seem like we have enough data for it to be that large
-# Should I get rid of all of the view switches?
+        if probabilities[i][0] > random.uniform(0, 1):
+            return probabilities[i][1].split(separator)

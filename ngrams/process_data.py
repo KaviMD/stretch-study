@@ -1,18 +1,31 @@
 from ngrams import generate_ngrams
 import simplejson as json
+import multiprocessing
+from functools import partial
+
+def generate_ngrams_threaded(n, c):
+    print("starting ngrams of length", n)
+    ngrams = generate_ngrams(n, c)
+    print("generated ngrams of length", n)
+    return ngrams
+
 
 corpus = ''
 
-with open('data/movies_text.txt') as f:
-    corpus = f.read().lower()
+if __name__ == "__main__":
+    multiprocessing.freeze_support()
 
-print("loaded file")
+    with open('data/movies_text.txt') as f:
+        corpus = f.read().lower()
+        print(len(corpus))
 
-ngrams = {}
+    print("loaded file")
 
-for i in range(2,16):
-    print(f"generating ngrams of length {i}")
-    ngrams[i] = generate_ngrams(i, corpus)
+    p = multiprocessing.Pool()
 
-with open('data/movies_processed.json', 'w') as f:
-    json.dump(ngrams, f)
+    generate_ngrams_threaded_partial = partial(generate_ngrams_threaded, c=corpus)
+
+    ngrams = p.map(generate_ngrams_threaded_partial, range(2,33))
+
+    with open('data/movies_processed.json', 'w') as f:
+        json.dump(ngrams, f)

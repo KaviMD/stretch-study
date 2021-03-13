@@ -5,6 +5,10 @@ from nltk.lm.preprocessing import pad_both_ends, padded_everygram_pipeline
 
 import simplejson as json
 # %%
+def split_chars(arr):
+    return [c for c in arr]
+
+# %%
 
 with open('data/simplified_all.txt', 'r') as f:
     events_all = f.read()
@@ -22,8 +26,21 @@ for user in events_grouped['1']:
 n = 3
 train, vocab = padded_everygram_pipeline(n, event_list)
 # %%
-lm = MLE(n)
-len(lm.vocab)
-lm.fit(train, vocab)
+model = MLE(n)
+model.fit(train, vocab)
 # %%
-lm.generate(2, text_seed=['m', 'w', 'm'])
+# Predict next actions based on a starting sequence using RNG
+model.generate(2, text_seed=split_chars('mwm'))
+
+# %%
+# Calculate the probability of a specific gram, could be used for a lot more control
+# https://stackoverflow.com/a/54979617
+
+print(model.counts['m']) # i.e. Count('m')
+print(model.counts[['m']]['w']) # i.e. Count('w'|'m')
+print(model.counts[split_chars('mw')]['m']) # i.e. Count('w'|'mw')
+
+print(model.score('w', 'm'))  # P('w'|'m')
+print(model.score('m', split_chars('mw')))  # P('m'|'mw')
+
+# %%

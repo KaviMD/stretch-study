@@ -1,3 +1,4 @@
+#%%
 import simplejson as json
 from tqdm import tqdm
 from copy import copy
@@ -20,6 +21,10 @@ def graph_equation(formula, x_range, **kwargs):
     x = np.array(x_range)
     y = formula(x)
     plt.plot(x,y, **kwargs)
+# %%
+
+with open('data/simplified_all.txt', 'r') as f:
+    s = f.read()
 # %%
 # Brute force pattern identification
 

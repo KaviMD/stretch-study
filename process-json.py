@@ -96,19 +96,38 @@ eventName = set()
 
 event_list = []
 
+event_list_grouped = {1:{},2:{},3:{},4:{}}
+
 for user in data['users']:
+    print(user)
+    current_task = 0
     for event in data['users'][user]:
         event_data = data['users'][user][event]
         eventInfo.add(event_data['eventInfo'])
         eventName.add(event_data['eventName'])
         event_list.append(event_mapping[event_data['eventName']])
+
+        if event_data['eventName'] in ['Task1Started', 'Task2Started', 'Task3Started', 'Task4Started']:
+            current_task = int(event_data['eventName'][4])
+        
+            if user in event_list_grouped[current_task]:
+                event_list_grouped[current_task][user].append([])
+            else:
+                event_list_grouped[current_task][user] = [[]]
+        
+        if current_task > 0:
+            event_list_grouped[current_task][user][-1].append(event_mapping[event_data['eventName']])
+        
+        if event_data['eventName'] in ['Task1Ended', 'Task2Ended', 'Task3Ended', 'Task4Ended']:
+            current_task = 0
 # %%
-mapping, simplified = make_list_chars(event_list)
+# Save action mappings and full user action set
+mapping, simplified_all = make_list_chars(event_list)
 
-s = "".join(removeDuplicates(simplified))
+s_all = "".join(removeDuplicates(simplified_all))
 
-with open('data/simplified.txt', 'w') as f:
-    f.write(s)
+with open('data/simplified_all.txt', 'w') as f:
+    f.write(s_all)
 
 
 with open('data/mapping.json', 'w') as f:
@@ -116,3 +135,16 @@ with open('data/mapping.json', 'w') as f:
 
 print(eventInfo)
 print(eventName)
+# %%
+# Save grouped user actions
+
+# Map the numbers to letters using the previously generated mapping
+for task in event_list_grouped:
+    for user in event_list_grouped[task]:
+        for i in range(len(event_list_grouped[task][user])):
+            no_duplicates = removeDuplicates([mapping[a] for a in event_list_grouped[task][user][i]])
+            event_list_grouped[task][user][i] = no_duplicates
+
+with open('data/grouped.json', 'w') as f:
+    json.dump(event_list_grouped, f)
+# %%

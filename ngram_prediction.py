@@ -89,7 +89,7 @@ for task in events_grouped:
         for confidence_threshold in np.arange(min_ct, max_ct, ct_step):
             # Run cross validation with teh given hyperparameters
             k = 5
-            kf = KFold(n_splits = k, shuffle=False) # 5 fold cross validation is used so that the test/train split is 20%
+            kf = KFold(n_splits = k, shuffle=True) # 5 fold cross validation is used so that the test/train split is 20%
 
             total_accuracy = 0
             total_threshold_accuracy = 0
@@ -162,6 +162,9 @@ df = pd.DataFrame(ngram_results, columns=['task_number', 'n', 'confidence_thresh
 df.to_csv('data/ngram_results.csv', index=False)
 df.head(100)
 
+#%%
+df = pd.read_csv("data/ngram_results.csv")
+
 # %%
 fig, big_axes = plt.subplots(nrows=4, ncols=1, figsize=(20, 25))
 plt.subplots_adjust(hspace=0.35)
@@ -175,7 +178,7 @@ for row, big_ax in enumerate(big_axes, start=1):
     # removes the white frame
     big_ax._frameon = False
 for i in range(0, 4):
-    filtered_data = df[df.task_number == str(i+1)].round({'confidence_threshold': 2})
+    filtered_data = df[df.task_number == i+1].round({'confidence_threshold': 2})
 
     n_confidence_accuracy = filtered_data.pivot(index='n', columns='confidence_threshold', values='total_threshold_accuracy')
     n_confidence_removed = filtered_data.pivot(index='n', columns='confidence_threshold', values='total_above_threshold')

@@ -69,8 +69,8 @@ with open('data/simplified_all.txt', 'r') as f:
     events_all = f.read().replace(mode_change_char, "")
 
 # Ngram hyperparameters
-min_n_components = 10
-max_n_components = 15
+min_n_components = 5
+max_n_components = 25
 # Confidence Threshold hyperparameters
 min_ct = -5 # -15
 max_ct = 0
@@ -124,7 +124,7 @@ for task in events_grouped:
                 threshold_checked = 0
                 threshold_correct = 0
 
-                past_n = 3
+                past_n = 2
                 for gram in [test_data[i : i + past_n] for i in range(0, len(test_data))]:
                     # We only want grams of length past_n
                     if len(gram) == past_n:
@@ -157,7 +157,10 @@ for task in events_grouped:
                 total_above_threshold += threshold_checked
 
                 total_accuracy += total_correct / total_checked
-                total_threshold_accuracy += threshold_correct / threshold_checked
+                try:
+                    total_threshold_accuracy += threshold_correct / threshold_checked
+                except ZeroDivisionError:
+                    pass
             
             hmm_results.append([task, n_components, confidence_threshold, total_accuracy/k, total_threshold_accuracy/k, total_grams, total_above_threshold])
 

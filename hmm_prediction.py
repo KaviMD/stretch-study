@@ -18,7 +18,7 @@ def prepare_data(raw_data):
     processed_data = []
     for e_list in raw_data:
         for e in e_list:
-            processed_data.append([ord(e)])
+            processed_data.append([ord(e)-97])
 
     processed_data_lengths = [len(e_list) for e_list in raw_data]
 
@@ -69,15 +69,15 @@ with open('data/simplified_all.txt', 'r') as f:
     events_all = f.read().replace(mode_change_char, "")
 
 # Ngram hyperparameters
-min_n_components = 2
-max_n_components = 5 # 40
+min_n_components = 10
+max_n_components = 15
 # Confidence Threshold hyperparameters
-min_ct = -15
+min_ct = -5 # -15
 max_ct = 0
 ct_step = 5
 # Gram Length
 # %%
-ngram_results = []
+hmm_results = []
 
 for task in events_grouped:
     # Get data for this task
@@ -108,11 +108,14 @@ for task in events_grouped:
                 train_data, train_data_lengths = prepare_data(train_data_raw)
                 test_data, test_data_lengths = prepare_data(test_data_raw)
 
-                vocab = set([v[0] for v in test_data])
+
+                train_vocab = set([v[0] for v in train_data])
+                test_vocab = set([v[0] for v in test_data])
 
                 # Create and train model
                 np.random.seed(42)
-                model = hmm.GaussianHMM(n_components=n_components, covariance_type="full", n_iter=10000)
+                model = hmm.MultinomialHMM(n_components=n_components, n_iter=10000)
+
                 model.fit(train_data, lengths=train_data_lengths)
 
                 total_checked = 0
@@ -131,8 +134,9 @@ for task in events_grouped:
                         max_probability = -9999999999999999999999
                         max_gram = "failed"
 
-                        for v in vocab:
+                        for v in test_vocab:
                             s = model.score(history + [[v]])
+                            #print(gram, history + [[v]], s)
                             if s > max_probability:
                                 max_probability = s
                                 max_gram = v
@@ -147,54 +151,53 @@ for task in events_grouped:
                             if max_probability >= confidence_threshold:
                                 threshold_correct += 1
                         
-                        #print(max_gram, max_probability, total_checked, threshold_correct)
+                        #print(answer[0], max_gram, max_probability, total_checked, total_correct)
                 
                 total_grams += total_checked
                 total_above_threshold += threshold_checked
 
-                try:
-                    total_accuracy += total_correct / total_checked
-                except ZeroDivisionError:
-                    pass
-                
-                try:
-                    total_threshold_accuracy += threshold_correct / threshold_checked
-                except ZeroDivisionError:
-                    pass
-            ngram_results.append([task, n_components, confidence_threshold, total_accuracy/k, total_threshold_accuracy/k, total_grams, total_above_threshold])
+                total_accuracy += total_correct / total_checked
+                total_threshold_accuracy += threshold_correct / threshold_checked
+            
+            hmm_results.append([task, n_components, confidence_threshold, total_accuracy/k, total_threshold_accuracy/k, total_grams, total_above_threshold])
+
 
 # %%
-split = next(kf.split(event_list))
+df = pd.DataFrame(hmm_results, columns=['task_number', 'n_components', 'confidence_threshold', 'total_accuracy', 'total_threshold_accuracy', 'total_grams', 'total_above_threshold'])
+df.to_csv('data/hmm_results.csv', index=False)
+df.head(100)
 
-event_list = np.array(event_list)
-
-train_data_raw = event_list[split[0]]
-test_data_raw = event_list[split[1]]
-
-train_data, train_data_lengths = prepare_data(train_data_raw)
-test_data, test_data_lengths = prepare_data(test_data_raw)
-
-vocab = set([v[0] for v in test_data])
+#%%
+df = pd.read_csv("data/hmm_results.csv")
 
 # %%
-np.random.seed(42)
+fig, big_axes = plt.subplots(nrows=4, ncols=1, figsize=(20, 25))
+plt.subplots_adjust(hspace=0.35)
 
-model = hmm.GaussianHMM(n_components=3, covariance_type="full", n_iter=10000)
+for row, big_ax in enumerate(big_axes, start=1):
+    big_ax.set_title(f"Task {row}", fontsize=16)
 
-# %%
-model.fit(train_data, lengths=train_data_lengths)
-# %%
+    # Turn off axis lines and ticks of the big subplot 
+    # obs alpha is 0 in RGBA string!
+    big_ax.tick_params(labelcolor=(1.,1.,1., 0.0), top='off', bottom='off', left='off', right='off')
+    # removes the white frame
+    big_ax._frameon = False
 
-history = [[118]]
-answer = [[100]]
+for i in range(0, 4):
+    filtered_data = df[df.task_number == i+1].round({'confidence_threshold': 2})
+    print(filtered_data)
 
-max_probability = -9999999999999999999999
-max_gram = "failed"
+    n_confidence_accuracy = filtered_data.pivot(index='n_components', columns='confidence_threshold', values='total_threshold_accuracy')
+    n_confidence_removed = filtered_data.pivot(index='n_components', columns='confidence_threshold', values='total_above_threshold')
 
-for v in vocab:
-    s = model.score(history + [[v]])
-    print(v, s)
-    if s > max_probability:
-        max_probability = s
-        max_gram = v
+    g = sns.heatmap(n_confidence_accuracy, ax=fig.add_subplot(4,2,i*2+1))
+    g.set_title('N & Confidence Threshold vs. Accuracy')
+    g.set_xticklabels(g.get_xticklabels(), rotation=45)
+
+    h = sns.heatmap(n_confidence_removed, ax=fig.add_subplot(4,2,i*2+2))
+    h.set_title('N & Confidence Threshold vs. # of Predictions Made')
+    h.set_xticklabels(h.get_xticklabels(), rotation=45)
+
+plt.show()
+
 # %%

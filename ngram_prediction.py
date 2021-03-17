@@ -98,6 +98,7 @@ for task in events_grouped:
 
             total_grams = 0
             total_above_threshold = 0
+            total_threshold_correct = 0
 
             for i, split in enumerate(kf.split(event_list)):
                 event_list = np.array(event_list)
@@ -157,7 +158,9 @@ for task in events_grouped:
 
                 total_accuracy += total_correct / total_checked
                 total_threshold_accuracy += threshold_correct / threshold_checked
-            ngram_results.append([task, n, confidence_threshold, total_accuracy/k, total_threshold_accuracy/k, total_grams, total_above_threshold, threshold_correct])
+
+                total_threshold_correct += threshold_correct
+            ngram_results.append([task, n, confidence_threshold, total_accuracy/k, total_threshold_accuracy/k, total_grams/k, total_above_threshold/k, total_threshold_correct/k])
 
 # %%
 df = pd.DataFrame(ngram_results, columns=['task_number', 'n', 'confidence_threshold', 'total_accuracy', 'total_threshold_accuracy', 'total_grams', 'total_above_threshold', 'total_threshold_correct'])

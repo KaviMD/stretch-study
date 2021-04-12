@@ -1,5 +1,6 @@
 # %%
-from hmmlearn import hmm
+#from hmmlearn import hmm
+from pomegranate import *
 
 from sklearn.model_selection import KFold
 import numpy as np
@@ -19,12 +20,11 @@ def split_chars(arr):
 def prepare_data(raw_data):
     processed_data = []
     for e_list in raw_data:
-        for e in e_list:
-            processed_data.append([ord(e)-97])
+        processed_data.append(np.array([ord(e)-97 for e in e_list]))
 
-    processed_data_lengths = [len(e_list) for e_list in raw_data]
+    vocab = set([item for sublist in processed_data for item in sublist])
 
-    return (processed_data, processed_data_lengths)
+    return (processed_data, vocab)
 
 # %%
 
@@ -105,28 +105,17 @@ for task in events_grouped:
                 train_data_raw = event_list[split[0]]
                 test_data_raw = event_list[split[1]]
 
-                train_data, train_data_lengths = prepare_data(train_data_raw)
-                test_data, test_data_lengths = prepare_data(test_data_raw)
-
-
-                train_vocab = set([v[0] for v in train_data])
-                test_vocab = set([v[0] for v in test_data])
+                train_data, train_vocab = prepare_data(train_data_raw)
+                test_data, test_vocab = prepare_data(test_data_raw)
 
                 # Create and train model
                 np.random.seed(42)
-                model = hmm.MultinomialHMM(n_components=n_components, n_iter=10000, tol=0.0001, init_params='e')
-
-                pi = np.random.rand(n_components)
-                pi /= pi.sum()
-                model.startprob_ = pi
                 
-                A = np.random.rand(n_components, n_components)
-                A /= A.sum(axis=1,keepdims=1)
-                model.transmat_ = A
+                model = HiddenMarkovModel.from_samples(DiscreteDistribution, n_components=n_components, X=train_data[:2], n_jobs=30)
                 
-                model.fit(train_data, lengths=train_data_lengths)
+                model.fit(sequences=train_data[2:], min_iterations=1000, n_jobs=30)
 
-                #print(model.startprob_, model.transmat_, model.emissionprob_)
+                model.bake()
 
                 total_checked = 0
                 total_correct = 0
@@ -135,33 +124,35 @@ for task in events_grouped:
                 threshold_correct = 0
 
                 past_n = 2
-                for gram in [test_data[i : i + past_n] for i in range(0, len(test_data))]:
-                    # We only want grams of length past_n
-                    if len(gram) == past_n:
-                        history = list(gram[:past_n-1])
-                        answer = gram[-1]
+                for i in range(0, len(test_data)):
+                    for gram in [test_data[i][j : j + past_n] for j in range(0, len(test_data[i]))]:
+                        # We only want grams of length past_n
+                        if len(gram) == past_n:
+                            history = list(gram[:past_n-1])
+                            answer = gram[-1]
 
-                        max_probability = -9999999999999999999999
-                        max_gram = "failed"
+                            max_probability = -9999999999999999999999
+                            max_gram = "failed"
 
-                        for v in test_vocab:
-                            s = model.score(history + [[v]])
-                            #print(gram, history + [[v]], s)
-                            if s > max_probability:
-                                max_probability = s
-                                max_gram = v
+                            for v in train_vocab:
+                                s = model.log_probability(history + [v])
+                                #print(history + [v], answer, s)
+                                if s > max_probability:
+                                    max_probability = s
+                                    max_gram = v
 
-                        total_checked += 1
+                            total_checked += 1
 
-                        if max_probability >= confidence_threshold:
-                            threshold_checked += 1
-
-                        if max_gram == answer[0]:
-                            total_correct += 1
                             if max_probability >= confidence_threshold:
-                                threshold_correct += 1
-                        
-                        #print(answer[0], max_gram, max_probability, total_checked, total_correct)
+                                threshold_checked += 1
+
+                            #print(max_gram, answer)
+                            if max_gram == answer:
+                                total_correct += 1
+                                if max_probability >= confidence_threshold:
+                                    threshold_correct += 1
+                            
+                            #print(answer[0], max_gram, max_probability, total_checked, total_correct)
                 
                 total_grams += total_checked
                 total_above_threshold += threshold_checked
@@ -175,6 +166,7 @@ for task in events_grouped:
                 total_threshold_correct += threshold_correct
             
             hmm_results.append([task, n_components, confidence_threshold, total_accuracy/k, total_threshold_accuracy/k, total_grams/k, total_above_threshold/k, total_threshold_correct/k])
+            print(hmm_results[-1])
 
  # %%
 df = pd.DataFrame(hmm_results, columns=['task_number', 'n_components', 'confidence_threshold', 'total_accuracy', 'total_threshold_accuracy', 'total_grams', 'total_above_threshold', 'total_threshold_correct'])
@@ -188,6 +180,7 @@ df['normalized_accuracy'] = df['total_threshold_correct'] / df['total_threshold_
 
 df.to_csv('data/hmm_results.csv', index=False)
 # %%
+df = pd.read_csv("data/hmm_results - Copy.csv")
 r = 4
 c = 4
 fig, big_axes = plt.subplots(nrows=r, ncols=1, figsize=(30, 25))

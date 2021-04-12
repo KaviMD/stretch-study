@@ -4,6 +4,7 @@ from nltk.util import ngrams
 from nltk.lm.preprocessing import pad_both_ends, padded_everygram_pipeline
 
 from sklearn.model_selection import KFold
+from sklearn import metrics
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -94,6 +95,9 @@ for task in events_grouped:
             kf = KFold(n_splits = k, shuffle=True) # 5 fold cross validation is used so that the test/train split is 20%
 
             total_accuracy = 0
+            total_precision = 0
+            total_recall = 0
+            total_f1 = 0
             total_threshold_accuracy = 0
 
             total_grams = 0
@@ -123,6 +127,9 @@ for task in events_grouped:
                 threshold_checked = 0
                 threshold_correct = 0
 
+                y_true = []
+                y_pred = []
+
                 for everygram in test_processced:
                     # I think there is one everygram generated per input seqence
                     for gram in everygram:
@@ -150,9 +157,17 @@ for task in events_grouped:
                                 total_correct += 1
                                 if max_probability >= confidence_threshold:
                                     threshold_correct += 1
+
+                            y_true += [answer]
+                            y_pred += [max_gram]
                             
                             #print(gram, max_gram, max_probability)
                 
+                total_metrics = metrics.classification_report(y_true, y_pred, output_dict=True)
+                total_precision += total_metrics['weighted avg']['precision']
+                total_recall += total_metrics['weighted avg']['recall']
+                total_f1 += total_metrics['weighted avg']['f1-score']
+
                 total_grams += total_checked
                 total_above_threshold += threshold_checked
 
@@ -160,10 +175,10 @@ for task in events_grouped:
                 total_threshold_accuracy += threshold_correct / threshold_checked
 
                 total_threshold_correct += threshold_correct
-            ngram_results.append([task, n, confidence_threshold, total_accuracy/k, total_threshold_accuracy/k, total_grams/k, total_above_threshold/k, total_threshold_correct/k])
+            ngram_results.append([task, n, confidence_threshold, total_accuracy/k, total_precision/k, total_recall/k, total_f1/k, total_threshold_accuracy/k, total_grams/k, total_above_threshold/k, total_threshold_correct/k])
 
 # %%
-df = pd.DataFrame(ngram_results, columns=['task_number', 'n', 'confidence_threshold', 'total_accuracy', 'total_threshold_accuracy', 'total_grams', 'total_above_threshold', 'total_threshold_correct'])
+df = pd.DataFrame(ngram_results, columns=['task_number', 'n', 'confidence_threshold', 'total_accuracy', 'total_precision', 'total_recall', 'total_f1-score', 'total_threshold_accuracy', 'total_grams', 'total_above_threshold', 'total_threshold_correct'])
 #df['normalized_prediction_accuracy'] = (df['total_threshold_correct'] / df['total_above_threshold']) * df['total_above_threshold']
 df.to_csv('data/ngram_results.csv', index=False)
 df.head(100)

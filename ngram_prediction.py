@@ -191,6 +191,9 @@ df['normalized_accuracy'] = df['total_threshold_correct'] / df['total_threshold_
 #df['normalized_predicted_accuracy'] = (df['fixed_accuracy'] * df['total_above_threshold'])
 df.to_csv('data/ngram_results.csv', index=False)
 # %%
+
+df['percent_predictions_total'] = df['total_above_threshold'] / df['total_grams']
+
 r = 4
 c = 4
 fig, big_axes = plt.subplots(nrows=r, ncols=1, figsize=(30, 25))
@@ -233,10 +236,10 @@ for i in range(0, 4):
     j.set_ylabel('# of Correct Predictions Made')
 
     
-    k = sns.scatterplot(data=filtered_data, x='total_threshold_accuracy', y='total_threshold_incorrect', hue='n', ax=fig.add_subplot(r,c,i*c+4))
-    k.set_title('Accuracy vs. # of Incorrect Predictions Made')
+    k = sns.scatterplot(data=filtered_data, x='total_threshold_accuracy', y='percent_predictions_total', hue='n', ax=fig.add_subplot(r,c,i*c+4))
+    k.set_title(f'Accuracy vs. % of Predictions Made')
     k.set_xlabel('Accuracy')
-    k.set_ylabel('# of Incorrect Predictions Made')
+    k.set_ylabel('% of Predictions Made')
 
 plt.show()
 fig.savefig("data/ngram_results.png")

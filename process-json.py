@@ -1,6 +1,6 @@
 #%%
 import simplejson as json
-from copy import copy
+from copy import copy, deepcopy
 #%%
 def make_list_chars(arr):
     unique = list(set(arr))
@@ -125,10 +125,13 @@ for user in data['users']:
 mapping, simplified_all = make_list_chars(event_list)
 
 s_all = "".join(removeDuplicates(simplified_all))
+s_all_duplicates = "".join(simplified_all)
 
 with open('data/simplified_all.txt', 'w') as f:
     f.write(s_all)
 
+with open('data/simplified_all_duplicates.txt', 'w') as f:
+    f.write(s_all_duplicates)
 
 with open('data/mapping.json', 'w') as f:
     json.dump(mapping, f)
@@ -139,12 +142,20 @@ print(eventName)
 # Save grouped user actions
 
 # Map the numbers to letters using the previously generated mapping
+event_list_grouped_duplicates = deepcopy(event_list_grouped)
+
 for task in event_list_grouped:
     for user in event_list_grouped[task]:
         for i in range(len(event_list_grouped[task][user])):
             no_duplicates = removeDuplicates([mapping[a] for a in event_list_grouped[task][user][i]])
             event_list_grouped[task][user][i] = no_duplicates
 
+            mapped = [mapping[a] for a in event_list_grouped_duplicates[task][user][i]]
+            event_list_grouped_duplicates[task][user][i] = mapped
+
 with open('data/grouped.json', 'w') as f:
     json.dump(event_list_grouped, f)
+
+with open('data/grouped_duplicates.json', 'w') as f:
+    json.dump(event_list_grouped_duplicates, f)
 # %%

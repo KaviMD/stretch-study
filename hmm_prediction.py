@@ -1,6 +1,7 @@
 # %%
 #from hmmlearn import hmm
-from pomegranate import *
+#from pomegranate import *
+import ghmm
 
 from sklearn.model_selection import KFold
 import numpy as np
@@ -12,6 +13,8 @@ from matplotlib.colors import LogNorm
 import simplejson as json
 import math
 
+import copy
+
 sns.set()
 # %%
 def split_chars(arr):
@@ -20,11 +23,28 @@ def split_chars(arr):
 def prepare_data(raw_data):
     processed_data = []
     for e_list in raw_data:
-        processed_data.append(np.array([ord(e)-97 for e in e_list]))
+        processed_data.append([ord(e)-97 for e in e_list])
 
     vocab = set([item for sublist in processed_data for item in sublist])
 
     return (processed_data, vocab)
+
+def calculate_emission_probabilities(data, n_states, n_outputs):
+    B = np.zeros((n_states, n_outputs))
+    data_split = copy.deepcopy(data)
+    
+    # Split each sequence into n_states sections
+    data_split = [np.array_split(s, n_states) for s in data_split]
+
+    # Count how many times each output occurs in each state
+    for sequence in data_split:
+        for state in range(n_states):
+            for output in range(n_outputs):
+                B[state][output] = np.count_nonzero(sequence[state] == output)
+    
+    # Normalize and return B
+    B_sum = B.sum(axis=1, keepdims=True)
+    return B/B_sum
 
 # %%
 
@@ -64,18 +84,19 @@ with open('data/mapping.json', 'r') as f:
 
 mode_change_char = char_mapping[str(event_mapping['ModeChange'])]
 
-with open('data/grouped.json', 'r') as f:
+with open('data/grouped_duplicates.json', 'r') as f:
     events_grouped = json.load(f)
 
-with open('data/simplified_all.txt', 'r') as f:
+with open('data/simplified_all_duplicates.txt', 'r') as f:
     events_all = f.read().replace(mode_change_char, "")
 
 # HMM hyperparameters
-n_components_range = [7, 10, 15, 20, 25, 28]#range(3,30)#
+n_components_range = [5]#[7, 10, 15, 20, 25, 28]#range(3,30)#
 # Confidence Threshold hyperparameters
-ct_range = [-15, -10, -6, 3] #np.arange(-10, -2, 0.25) #
+ct_range = [0]#[-15, -10, -6, 3] #np.arange(-10, -2, 0.25) #
 # Gram Length
 # %%
+
 hmm_results = []
 
 for task in events_grouped:
@@ -109,13 +130,34 @@ for task in events_grouped:
                 test_data, test_vocab = prepare_data(test_data_raw)
 
                 # Create and train model
-                np.random.seed(42)
-                
-                model = HiddenMarkovModel.from_samples(DiscreteDistribution, n_components=n_components, X=train_data[:2], n_jobs=30)
-                
-                model.fit(sequences=train_data[2:], min_iterations=1000, n_jobs=30)
+                vocab_len = max(train_vocab)+1
+                sigma = ghmm.IntegerRange(0, vocab_len) # Emission range
 
-                model.bake()
+                calculate_emission_probabilities(train_data, n_components, vocab_len)
+
+                raise KeyboardInterrupt
+                # Transition Matrix
+                A = [[1.0/n_components]*n_components for n in range(n_components)] # Equally distribute the transition probabilities
+                
+                # Emission Probabilities
+                B = [[1.0/vocab_len]*vocab_len for n in range(n_components)] # Equally distribute the emission probabilities
+
+                # Initial State Distribution
+                pi = [1.0/n_components]*n_components # Equally distribute the starting probabilities
+
+                m = ghmm.HMMFromMatrices(sigma, ghmm.DiscreteDistribution(sigma), A, B, pi)
+
+                print(m.asMatrices()[0])
+    
+                #m.baumWelch(ghmm.SequenceSet(sigma, train_data), nrSteps=10000, loglikelihoodCutoff=0.00000001)
+                #print('Training Done')
+
+                m.baumWelchSetup(ghmm.SequenceSet(sigma,train_data), 10000)
+
+                print(m.baumWelchStep(10000, 0.00001))
+                
+                print(m.asMatrices()[0])
+                
 
                 total_checked = 0
                 total_correct = 0
@@ -135,7 +177,7 @@ for task in events_grouped:
                             max_gram = "failed"
 
                             for v in train_vocab:
-                                s = model.log_probability(history + [v])
+                                s = m.loglikelihood(ghmm.EmissionSequence(sigma, history + [v]))
                                 #print(history + [v], answer, s)
                                 if s > max_probability:
                                     max_probability = s
@@ -168,7 +210,7 @@ for task in events_grouped:
             hmm_results.append([task, n_components, confidence_threshold, total_accuracy/k, total_threshold_accuracy/k, total_grams/k, total_above_threshold/k, total_threshold_correct/k])
             print(hmm_results[-1])
 
- # %%
+# %%
 df = pd.DataFrame(hmm_results, columns=['task_number', 'n_components', 'confidence_threshold', 'total_accuracy', 'total_threshold_accuracy', 'total_grams', 'total_above_threshold', 'total_threshold_correct'])
 df.to_csv('data/hmm_results.csv', index=False)
 df.head(100)

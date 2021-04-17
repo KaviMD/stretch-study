@@ -42,10 +42,23 @@ def calculate_emission_probabilities(data, n_states, n_outputs):
             for output in range(n_outputs):
                 B[state][output] = np.count_nonzero(sequence[state] == output)
     
+    # Make sure that no element has a probability of 0
+    # B is multiplied by 5 to reduce the weight of 0 elements
+    B = (B*5)+1
+
     # Normalize and return B
     B_sum = B.sum(axis=1, keepdims=True)
-    return B/B_sum
+    return (B/B_sum).tolist()
 
+def calculate_transition_probabilities(n_states):
+    A = np.zeros((n_states, n_states))
+
+    for i in range(n_states):
+        # Each state has a very high probability to transition to the next one (the last state transitions to itself)
+        A[i] += 0.5/(n_states-1)
+        A[i][min(i+1, n_states-1)] = 0.5
+    
+    return A
 # %%
 
 event_mapping = {
@@ -133,31 +146,23 @@ for task in events_grouped:
                 vocab_len = max(train_vocab)+1
                 sigma = ghmm.IntegerRange(0, vocab_len) # Emission range
 
-                calculate_emission_probabilities(train_data, n_components, vocab_len)
-
-                raise KeyboardInterrupt
                 # Transition Matrix
-                A = [[1.0/n_components]*n_components for n in range(n_components)] # Equally distribute the transition probabilities
+                A = calculate_transition_probabilities(n_components)
                 
                 # Emission Probabilities
-                B = [[1.0/vocab_len]*vocab_len for n in range(n_components)] # Equally distribute the emission probabilities
+                B = calculate_emission_probabilities(train_data, n_components, vocab_len)
 
                 # Initial State Distribution
                 pi = [1.0/n_components]*n_components # Equally distribute the starting probabilities
 
                 m = ghmm.HMMFromMatrices(sigma, ghmm.DiscreteDistribution(sigma), A, B, pi)
-
-                print(m.asMatrices()[0])
     
-                #m.baumWelch(ghmm.SequenceSet(sigma, train_data), nrSteps=10000, loglikelihoodCutoff=0.00000001)
-                #print('Training Done')
-
-                m.baumWelchSetup(ghmm.SequenceSet(sigma,train_data), 10000)
-
-                print(m.baumWelchStep(10000, 0.00001))
+                m.baumWelch(ghmm.SequenceSet(sigma, train_data))
+                # print('Training Done')
                 
-                print(m.asMatrices()[0])
-                
+                # print(m.asMatrices()[0])
+                # print(m.asMatrices()[1])
+                # print(m.asMatrices()[2])
 
                 total_checked = 0
                 total_correct = 0
@@ -178,7 +183,7 @@ for task in events_grouped:
 
                             for v in train_vocab:
                                 s = m.loglikelihood(ghmm.EmissionSequence(sigma, history + [v]))
-                                #print(history + [v], answer, s)
+                                print(history + [v], answer, s)
                                 if s > max_probability:
                                     max_probability = s
                                     max_gram = v
@@ -195,6 +200,7 @@ for task in events_grouped:
                                     threshold_correct += 1
                             
                             #print(answer[0], max_gram, max_probability, total_checked, total_correct)
+                            raise Exception
                 
                 total_grams += total_checked
                 total_above_threshold += threshold_checked
@@ -208,13 +214,11 @@ for task in events_grouped:
                 total_threshold_correct += threshold_correct
             
             hmm_results.append([task, n_components, confidence_threshold, total_accuracy/k, total_threshold_accuracy/k, total_grams/k, total_above_threshold/k, total_threshold_correct/k])
-            print(hmm_results[-1])
 
 # %%
 df = pd.DataFrame(hmm_results, columns=['task_number', 'n_components', 'confidence_threshold', 'total_accuracy', 'total_threshold_accuracy', 'total_grams', 'total_above_threshold', 'total_threshold_correct'])
 df.to_csv('data/hmm_results.csv', index=False)
 df.head(100)
-
 #%%
 df = pd.read_csv("data/hmm_results.csv")
 df['total_threshold_incorrect'] = df['total_above_threshold'] - df['total_threshold_correct']
@@ -222,14 +226,14 @@ df['normalized_accuracy'] = df['total_threshold_correct'] / df['total_threshold_
 
 df.to_csv('data/hmm_results.csv', index=False)
 # %%
-df = pd.read_csv("data/hmm_results - Copy.csv")
+df = pd.read_csv("data/hmm_results.csv")
 r = 4
 c = 4
 fig, big_axes = plt.subplots(nrows=r, ncols=1, figsize=(30, 25))
 plt.subplots_adjust(hspace=0.4)
 
 for row, big_ax in enumerate(big_axes, start=1):
-    big_ax.set_title(f"Task {row}", fontsize=16,  y=1.08)
+    big_ax.set_title("Task {row}".format(row=row), fontsize=16,  y=1.08)
 
     # Turn off axis lines and ticks of the big subplot 
     # obs alpha is 0 in RGBA string!

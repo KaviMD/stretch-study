@@ -107,7 +107,6 @@ with open('data/simplified_all_duplicates.txt', 'r') as f:
 n_components_range = [5, 7, 10, 15, 20, 25, 28]#range(3,30)#
 # Confidence Threshold hyperparameters
 ct_range = [-np.inf, -1000000, -100000, -10000, -1000, -100, -15, -10, -6, 0] #np.arange(-10, -2, 0.25) #
-# Gram Length
 # %%
 
 hmm_results = []
@@ -122,10 +121,11 @@ for task in events_grouped:
     # Set hyperparameters
     for n_components in n_components_range:
         for confidence_threshold in ct_range:
-            # Run cross validation with teh given hyperparameters
+            # Run cross validation with the given hyperparameters
             k = 5
             kf = KFold(n_splits = k, shuffle=True) # 5 fold cross validation is used so that the test/train split is 20%
 
+            # Initialize variable to track metrics across folds
             total_accuracy = 0
             total_threshold_accuracy = 0
 
@@ -170,24 +170,31 @@ for task in events_grouped:
                 threshold_checked = 0
                 threshold_correct = 0
 
+                # Split each training action sequence (the full set of actions completed by a user)
+                # into action groups of length 3 (past_n + 1)
                 past_n = 2
                 for i in range(0, len(test_data)):
                     for gram in [test_data[i][j : j + past_n] for j in range(0, len(test_data[i]))]:
-                        # We only want grams of length past_n
+                        # We only want grams of length past_n (the first and last sequences generated will be a bit shorter, because of the rolling window)
                         if len(gram) == past_n:
+                            # Split the sequence of 3 into the last 2 actions and the current action (to be predicted)
                             history = list(gram[:past_n-1])
                             answer = gram[-1]
 
                             max_probability = -9999999999999999999999
                             max_gram = "failed"
-
+                            
+                            # Calculate the likelihood of each possible action in the vocabulary being chose
+                            # Figure out what the model thinks the one with the highest likelihood is
+                            # This is what we use as the model prediction
                             for v in train_vocab:
                                 s = m.loglikelihood(ghmm.EmissionSequence(sigma, history + [v]))
                                 # print(history + [v], answer, s)
                                 if s > max_probability:
                                     max_probability = s
                                     max_gram = v
-
+                            
+                            # Update the metric tracking variables based on what the model predicted
                             total_checked += 1
 
                             if max_probability >= confidence_threshold:
@@ -200,7 +207,6 @@ for task in events_grouped:
                                     threshold_correct += 1
                             
                             # print(answer[0], max_gram, max_probability, total_checked, total_correct)
-                    #raise Exception
                 
                 total_grams += total_checked
                 total_above_threshold += threshold_checked

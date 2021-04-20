@@ -48,7 +48,7 @@ def calculate_emission_probabilities(data, n_states, n_outputs):
 
     # Normalize and return B
     B_sum = B.sum(axis=1, keepdims=True)
-    return (B/B_sum).tolist()
+    return (B/B_sum)*10000
 
 def calculate_transition_probabilities(n_states):
     A = np.zeros((n_states, n_states))
@@ -58,7 +58,7 @@ def calculate_transition_probabilities(n_states):
         A[i] += 0.5/(n_states-1)
         A[i][min(i+1, n_states-1)] = 0.5
     
-    return A
+    return A*10000
 # %%
 
 event_mapping = {
@@ -104,9 +104,9 @@ with open('data/simplified_all_duplicates.txt', 'r') as f:
     events_all = f.read().replace(mode_change_char, "")
 
 # HMM hyperparameters
-n_components_range = [5]#[7, 10, 15, 20, 25, 28]#range(3,30)#
+n_components_range = [5, 7, 10, 15, 20, 25, 28]#range(3,30)#
 # Confidence Threshold hyperparameters
-ct_range = [0]#[-15, -10, -6, 3] #np.arange(-10, -2, 0.25) #
+ct_range = [-np.inf, -1000000, -100000, -10000, -1000, -100, -15, -10, -6, 0] #np.arange(-10, -2, 0.25) #
 # Gram Length
 # %%
 
@@ -157,7 +157,7 @@ for task in events_grouped:
 
                 m = ghmm.HMMFromMatrices(sigma, ghmm.DiscreteDistribution(sigma), A, B, pi)
     
-                m.baumWelch(ghmm.SequenceSet(sigma, train_data))
+                m.baumWelch(ghmm.SequenceSet(sigma, train_data), nrSteps=1000, loglikelihoodCutoff=0.00005) # Defaults: nrSteps=500, loglikelihoodCutoff=0.0001
                 # print('Training Done')
                 
                 # print(m.asMatrices()[0])
@@ -183,7 +183,7 @@ for task in events_grouped:
 
                             for v in train_vocab:
                                 s = m.loglikelihood(ghmm.EmissionSequence(sigma, history + [v]))
-                                print(history + [v], answer, s)
+                                # print(history + [v], answer, s)
                                 if s > max_probability:
                                     max_probability = s
                                     max_gram = v
@@ -193,27 +193,27 @@ for task in events_grouped:
                             if max_probability >= confidence_threshold:
                                 threshold_checked += 1
 
-                            #print(max_gram, answer)
+                            # print(max_gram, answer)
                             if max_gram == answer:
                                 total_correct += 1
                                 if max_probability >= confidence_threshold:
                                     threshold_correct += 1
                             
-                            #print(answer[0], max_gram, max_probability, total_checked, total_correct)
-                            raise Exception
+                            # print(answer[0], max_gram, max_probability, total_checked, total_correct)
+                    #raise Exception
                 
                 total_grams += total_checked
                 total_above_threshold += threshold_checked
 
-                total_accuracy += total_correct / total_checked
+                total_accuracy += float(total_correct) / float(total_checked)
                 try:
-                    total_threshold_accuracy += threshold_correct / threshold_checked
+                    total_threshold_accuracy += float(threshold_correct) / float(threshold_checked)
                 except ZeroDivisionError:
                     pass
 
                 total_threshold_correct += threshold_correct
             
-            hmm_results.append([task, n_components, confidence_threshold, total_accuracy/k, total_threshold_accuracy/k, total_grams/k, total_above_threshold/k, total_threshold_correct/k])
+            hmm_results.append([task, n_components, confidence_threshold, float(total_accuracy)/float(k), float(total_threshold_accuracy)/float(k), float(total_grams)/float(k), float(total_above_threshold)/float(k), float(total_threshold_correct)/float(k)])
 
 # %%
 df = pd.DataFrame(hmm_results, columns=['task_number', 'n_components', 'confidence_threshold', 'total_accuracy', 'total_threshold_accuracy', 'total_grams', 'total_above_threshold', 'total_threshold_correct'])
@@ -225,58 +225,66 @@ df['total_threshold_incorrect'] = df['total_above_threshold'] - df['total_thresh
 df['normalized_accuracy'] = df['total_threshold_correct'] / df['total_threshold_incorrect']
 
 df.to_csv('data/hmm_results.csv', index=False)
-# %%
+#%%
 df = pd.read_csv("data/hmm_results.csv")
-r = 4
-c = 4
-fig, big_axes = plt.subplots(nrows=r, ncols=1, figsize=(30, 25))
-plt.subplots_adjust(hspace=0.4)
 
-for row, big_ax in enumerate(big_axes, start=1):
-    big_ax.set_title("Task {row}".format(row=row), fontsize=16,  y=1.08)
-
-    # Turn off axis lines and ticks of the big subplot 
-    # obs alpha is 0 in RGBA string!
-    big_ax.tick_params(labelcolor=(1.,1.,1., 0.0), top='off', bottom='off', left='off', right='off')
-    # removes the white frame
-    big_ax._frameon = False
-
-for i in range(0, 4):
-    filtered_data = df[df.task_number == i+1].round({'confidence_threshold': 2})
-
-    n_confidence_accuracy = filtered_data.pivot(index='n_components', columns='confidence_threshold', values='total_threshold_accuracy')
-    n_confidence_removed = filtered_data.pivot(index='n_components', columns='confidence_threshold', values='total_above_threshold')
-
-    #log_norm = LogNorm(vmin=n_confidence_removed.min().min(), vmax=n_confidence_removed.max().max())
-    #cbar_ticks = [math.pow(10, i) for i in range(math.floor(math.log10(n_confidence_removed.min().min())), 1+math.ceil(math.log10(n_confidence_removed.max().max())))]
-
-
-    g = sns.heatmap(n_confidence_accuracy, ax=fig.add_subplot(r,c,i*c+1))
-    g.set_title('# of Hidden States & Confidence Threshold vs. Accuracy')
-    g.set_xticklabels(g.get_xticklabels(), rotation=45)
-    g.set_ylabel('# of Hidden States')
-    g.set_xlabel('Confidence Threshold')
-
-    h = sns.heatmap(n_confidence_removed, ax=fig.add_subplot(r,c,i*c+2)) #, norm=log_norm, cbar_kws={"ticks": cbar_ticks})
-    h.set_title('# of Hidden States & Confidence Threshold vs. # of Predictions Made')
-    h.set_xticklabels(h.get_xticklabels(), rotation=45)
-    h.set_ylabel('# of Hidden States')
-    h.set_xlabel('Confidence Threshold')
-
-    
-    j = sns.scatterplot(data=filtered_data, x='total_threshold_accuracy', y='total_threshold_correct', hue='n_components', ax=fig.add_subplot(r,c,i*c+3))
-    j.set_title('Accuracy vs. # of Correct Predictions Made')
-    j.set_xlabel('Accuracy')
-    j.set_ylabel('# of Correct Predictions Made')
-    j.set_xlim((0, 1))
-
-    
-    k = sns.scatterplot(data=filtered_data, x='total_threshold_accuracy', y='total_threshold_incorrect', hue='n_components', ax=fig.add_subplot(r,c,i*c+4))
-    k.set_title('Accuracy vs. # of Incorrect Predictions Made')
-    k.set_xlabel('Accuracy')
-    k.set_ylabel('# of Incorrect Predictions Made')
-    k.set_xlim((0, 1))
+sns.lmplot('n_components', 'total_accuracy', data=df, hue='task_number', fit_reg=False)
 
 plt.show()
-fig.savefig("data/hmm_results.png")
+
+# %%
+## Python 3 Graphing Code
+# df = pd.read_csv("data/hmm_results.csv")
+# r = 4
+# c = 4
+# fig, big_axes = plt.subplots(nrows=r, ncols=1, figsize=(30, 25))
+# plt.subplots_adjust(hspace=0.4)
+
+# for row, big_ax in enumerate(big_axes, start=1):
+#     big_ax.set_title("Task {row}".format(row=row), fontsize=16,  y=1.08)
+
+#     # Turn off axis lines and ticks of the big subplot 
+#     # obs alpha is 0 in RGBA string!
+#     big_ax.tick_params(labelcolor=(1.,1.,1., 0.0), top='off', bottom='off', left='off', right='off')
+#     # removes the white frame
+#     big_ax._frameon = False
+
+# for i in range(0, 4):
+#     filtered_data = df[df.task_number == i+1].round({'confidence_threshold': 2})
+
+#     n_confidence_accuracy = filtered_data.pivot(index='n_components', columns='confidence_threshold', values='total_threshold_accuracy')
+#     n_confidence_removed = filtered_data.pivot(index='n_components', columns='confidence_threshold', values='total_above_threshold')
+
+#     #log_norm = LogNorm(vmin=n_confidence_removed.min().min(), vmax=n_confidence_removed.max().max())
+#     #cbar_ticks = [math.pow(10, i) for i in range(math.floor(math.log10(n_confidence_removed.min().min())), 1+math.ceil(math.log10(n_confidence_removed.max().max())))]
+
+
+#     g = sns.heatmap(n_confidence_accuracy, ax=fig.add_subplot(r,c,i*c+1))
+#     g.set_title('# of Hidden States & Confidence Threshold vs. Accuracy')
+#     g.set_xticklabels(g.get_xticklabels(), rotation=45)
+#     g.set_ylabel('# of Hidden States')
+#     g.set_xlabel('Confidence Threshold')
+
+#     h = sns.heatmap(n_confidence_removed, ax=fig.add_subplot(r,c,i*c+2)) #, norm=log_norm, cbar_kws={"ticks": cbar_ticks})
+#     h.set_title('# of Hidden States & Confidence Threshold vs. # of Predictions Made')
+#     h.set_xticklabels(h.get_xticklabels(), rotation=45)
+#     h.set_ylabel('# of Hidden States')
+#     h.set_xlabel('Confidence Threshold')
+
+    
+#     j = sns.scatterplot(data=filtered_data, x='total_threshold_accuracy', y='total_threshold_correct', hue='n_components', ax=fig.add_subplot(r,c,i*c+3))
+#     j.set_title('Accuracy vs. # of Correct Predictions Made')
+#     j.set_xlabel('Accuracy')
+#     j.set_ylabel('# of Correct Predictions Made')
+#     j.set_xlim((0, 1))
+
+    
+#     k = sns.scatterplot(data=filtered_data, x='total_threshold_accuracy', y='total_threshold_incorrect', hue='n_components', ax=fig.add_subplot(r,c,i*c+4))
+#     k.set_title('Accuracy vs. # of Incorrect Predictions Made')
+#     k.set_xlabel('Accuracy')
+#     k.set_ylabel('# of Incorrect Predictions Made')
+#     k.set_xlim((0, 1))
+
+# plt.show()
+# fig.savefig("data/hmm_results.png")
 # %%
